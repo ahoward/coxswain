@@ -14,8 +14,6 @@ module Coxswain
     def initialize(*n, &block)
       @block = block
       @queue = Queue.new
-      @threads = []
-      @workers = []
       spawn(n.first) unless n.empty?
     end
 
@@ -26,7 +24,7 @@ module Coxswain
     def spawn(n)
       Integer(n).times do
         worker = Worker.new(pool)
-        @workers.push(worker)
+        push(worker)
 
         q = Queue.new
 
@@ -40,9 +38,9 @@ module Coxswain
             end
           end
 
-        running = q.pop
-
-        @threads.push(thread)
+        worker.thread = thread
+        wait_for_thread_to_start = q.pop
+        worker.prefork!
       end
     end
 
@@ -50,46 +48,60 @@ module Coxswain
       @queue.push([job, callback])
     end
 
-    def shutdown!
-      @workers.each do |worker|
-        Process.kill('TERM', worker.pid) rescue nil
+    def shutdown!(signal = 'TERM')
+      each do |worker|
+        Process.kill(signal, worker.pid) rescue nil
         Process.waitpid(worker.pid, Process::WNOHANG|Process::WUNTRACED)
       end
     end
 
     class Worker
+      attr_accessor 'pool'
       attr_accessor 'block'
       attr_accessor 'parent'
       attr_accessor 'child'
       attr_accessor 'socket'
       attr_accessor 'pid'
+      attr_accessor 'thread'
 
       def initialize(pool)
+        @pool = pool
         @block = pool.block
-        fork!
       end
 
-      def fork!
-        pair = Socket.pair(Socket::AF_UNIX, Socket::SOCK_STREAM, 0)
+      def prefork!
+        socketpair = Socket.pair(Socket::AF_UNIX, Socket::SOCK_STREAM, 0)
 
-        if((child = fork))
-          @parent = Process.pid
-          @socket = pair[0]
-          pair[1].close
-          pair[1] = nil
-          @socket.sync = true
-          @child = Integer(@socket.gets)
-          @pid = @child
+        if fork
+          initialize_parent_process!(socketpair)
         else
-          @parent = Process.ppid
-          @child = Process.pid
-          @socket = pair[1]
-          pair[0].close
-          pair[0] = nil
-          @socket.sync = true
-          @socket.puts(@child)
-          @pid = @child
+          initialize_child_process!(socketpair)
+        end
+      end
+
+      def initialize_parent_process!(socketpair)
+        @parent = Process.pid
+        @socket = socketpair[0]
+        socketpair[1].close
+        socketpair[1] = nil
+        @socket.sync = true
+        wait_for_child_to_start = @socket.gets
+        @child = Integer(wait_for_child_to_start)
+        @pid = @child
+      end
+
+      def initialize_child_process!(socketpair)
+        @parent = Process.ppid
+        @child = Process.pid
+        @socket = socketpair[1]
+        socketpair[0].close
+        socketpair[0] = nil
+        @socket.sync = true
+        @pid = @child
+        @socket.puts(@pid)
+        begin
           process!
+        ensure
           exit!
         end
       end
@@ -133,8 +145,6 @@ end
 
 
 if $0 == __FILE__
-  require 'coxswain'
-
   pool =
     Coxswain.pool do |job|
       "#{ job } ran at #{ Time.now.to_f } in #{ Process.pid }..."
