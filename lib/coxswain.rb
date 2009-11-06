@@ -9,7 +9,6 @@ module Coxswain
   class Pool < ::Array
     attr_accessor 'block'
     attr_accessor 'queue'
-    attr_accessor 'threads'
 
     def initialize(*n, &block)
       @block = block
