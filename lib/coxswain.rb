@@ -2,8 +2,8 @@ require 'thread'
 require 'socket'
 
 module Coxswain
-  def Coxswain.pool(&block)
-    Pool.new(&block)
+  def Coxswain.pool(*args, &block)
+    Pool.new(*args, &block)
   end
 
   class Pool < ::Array
@@ -11,10 +11,12 @@ module Coxswain
     attr_accessor 'queue'
     attr_accessor 'threads'
 
-    def initialize(&block)
+    def initialize(*n, &block)
       @block = block
       @queue = Queue.new
       @threads = []
+      @workers = []
+      spawn(n.first) unless n.empty?
     end
 
     def pool
@@ -24,6 +26,7 @@ module Coxswain
     def spawn(n)
       Integer(n).times do
         worker = Worker.new(pool)
+        @workers.push(worker)
 
         q = Queue.new
 
@@ -31,9 +34,9 @@ module Coxswain
           Thread.new(worker) do |worker|
             q.push(:running)
             loop do
-              job, q = @queue.pop
+              job, callback = @queue.pop
               result = worker.run(job)
-              q.push(result)
+              callback.call(result) if callback
             end
           end
 
@@ -43,9 +46,15 @@ module Coxswain
       end
     end
 
-    def run(job)
-      @queue.push([job, q=Queue.new])
-      q.pop
+    def run(job, &callback)
+      @queue.push([job, callback])
+    end
+
+    def shutdown!
+      @workers.each do |worker|
+        Process.kill('TERM', worker.pid) rescue nil
+        Process.waitpid(worker.pid, Process::WNOHANG|Process::WUNTRACED)
+      end
     end
 
     class Worker
@@ -53,6 +62,7 @@ module Coxswain
       attr_accessor 'parent'
       attr_accessor 'child'
       attr_accessor 'socket'
+      attr_accessor 'pid'
 
       def initialize(pool)
         @block = pool.block
@@ -69,6 +79,7 @@ module Coxswain
           pair[1] = nil
           @socket.sync = true
           @child = Integer(@socket.gets)
+          @pid = @child
         else
           @parent = Process.ppid
           @child = Process.pid
@@ -77,6 +88,7 @@ module Coxswain
           pair[0] = nil
           @socket.sync = true
           @socket.puts(@child)
+          @pid = @child
           process!
           exit!
         end
@@ -129,11 +141,17 @@ if $0 == __FILE__
 
   pool.spawn(10)
 
+  q = Queue.new
+
   10.times do |i|
-    puts pool.run('job %d' % i)
+    pool.run('job %d' % i){|result| q.push(result)}
   end
 
-  sleep
+  10.times do
+    p q.pop
+  end
+
+  pool.shutdown!
 end
 
 
