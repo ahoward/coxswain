@@ -131,39 +131,34 @@ module Coxswain
 end
 
 
+
 if $0 == __FILE__
-  STDOUT.sync = true
+  require 'coxswain'
 
   pool =
     Coxswain.pool do |job|
       "#{ job } ran at #{ Time.now.to_f } in #{ Process.pid }..."
     end
 
-  pool.spawn(10)
+  pool.spawn(5)
 
   q = Queue.new
 
-  10.times do |i|
-    pool.run('job %d' % i){|result| q.push(result)}
-  end
-
-  10.times do
-    p q.pop
-  end
+  10.times{|i| pool.run('job %d' % i){|result| q.push(result)}}
+  10.times{ p q.pop }
 
   pool.shutdown!
 end
 
-
 __END__
 
-job 0 ran at 1257481668.77393 in 57260...
-job 1 ran at 1257481668.77452 in 57261...
-job 2 ran at 1257481668.775 in 57262...
-job 3 ran at 1257481668.77549 in 57263...
-job 4 ran at 1257481668.77594 in 57264...
-job 5 ran at 1257481668.77643 in 57265...
-job 6 ran at 1257481668.77692 in 57266...
-job 7 ran at 1257481668.77739 in 57267...
-job 8 ran at 1257481668.77782 in 57268...
-job 9 ran at 1257481668.77833 in 57269...
+"job 0 ran at 1257517331.80438 in 60310..."
+"job 1 ran at 1257517331.80474 in 60311..."
+"job 2 ran at 1257517331.80499 in 60312..."
+"job 4 ran at 1257517331.80536 in 60314..."
+"job 3 ran at 1257517331.80559 in 60313..."
+"job 6 ran at 1257517331.80602 in 60312..."
+"job 5 ran at 1257517331.80592 in 60310..."
+"job 8 ran at 1257517331.80624 in 60314..."
+"job 7 ran at 1257517331.80618 in 60311..."
+"job 9 ran at 1257517331.80645 in 60313..."

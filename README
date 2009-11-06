@@ -1,6 +1,10 @@
 NAME
   coxswain
 
+SUMMARY
+  easily pre-fork a pool of workers and transparently send jobs to the first
+  available worker
+
 DESCRIPTION
 
   The role of a coxswain is to:
@@ -12,3 +16,5 @@ DESCRIPTION
     * Make any necessary race tactic calls
 
   ref: http://en.wikipedia.org/wiki/Boat_positions_%28sport_rowing%29#Coxswain_.28cox.29
+
+  ref: http://github.com/defunkt/resque/issues/#issue/1
